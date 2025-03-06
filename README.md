@@ -2,4 +2,4 @@
 AI를 이용한 영작문 연습 프로그램
 
 .env
-API_KEY=<your api key here>
+API_KEY= 'your api key here'
