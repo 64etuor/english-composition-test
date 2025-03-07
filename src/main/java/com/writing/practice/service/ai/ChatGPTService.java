@@ -160,22 +160,43 @@ public class ChatGPTService implements CompositionAIService {
     }
 
     @Override
-    public FeedbackResponseDto getFeedback(String koreanSentence, String userSentence) {
-        String prompt = String.format("""
-            Act as an English writing tutor. Evaluate this English translation:
+    public FeedbackResponseDto getFeedback(String koreanSentence, String userTranslation) {
+        String prompt = """
+            당신은 한국 학생들의 영어 번역을 평가하는 영어 교사입니다.
             
-            Korean: %s
-            Student's English: %s
+            다음 한국어 문장과 학생의 영어 번역을 평가해주세요:
             
-            Provide feedback in this JSON format:
+            원문: %s
+            학생 번역: %s
+            
+            다음 JSON 형식으로 응답해주세요:
             {
-                "idealSentence": "The best possible English translation",
-                "feedback": "Detailed feedback about grammar, vocabulary, and natural expression",
-                "score": 85
+                "score": <0-100 사이의 점수>,
+                "idealSentence": "<자연스러운 영어 번역>",
+                "feedback": "<한국어로 상세한 피드백>"
             }
             
-            Be encouraging and constructive in your feedback.
-            """, koreanSentence, userSentence);
+            점수 기준:
+            - 90-100: 완벽하거나 거의 완벽한 자연스러운 번역
+            - 80-89: 사소한 문제가 있는 좋은 번역
+            - 70-79: 문법이나 단어 선택에 일부 문제가 있지만 수용 가능한 번역
+            - 60-69: 여러 오류가 있지만 기본적인 의미는 전달되는 번역
+            - 60 미만: 이해를 방해하는 심각한 오류가 있는 번역
+            
+            평가 요소:
+            1. 문법 정확성 (30%%)
+            2. 단어 선택과 어휘 (30%%)
+            3. 자연스러운 표현 (20%%)
+            4. 원문 의미의 보존 (20%%)
+            
+            피드백 구성:
+            1. 전반적인 평가
+            2. 구체적인 오류나 문제점 지적
+            3. 개선 제안
+            4. 긍정적인 강화
+            
+            엄격하되 격려하는 톤으로 평가해주세요.
+            """.formatted(koreanSentence, userTranslation);
         
         String content = makeApiCall("feedback", prompt);
         
