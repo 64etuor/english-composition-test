@@ -156,22 +156,44 @@ public class DeepseekService implements CompositionAIService {
     }
 
     @Override
-    public FeedbackResponseDto getFeedback(String koreanSentence, String userSentence) {
-        String prompt = String.format("""
-            Act as an English writing tutor. Evaluate this English translation:
+    public FeedbackResponseDto getFeedback(String koreanSentence, String userTranslation) {
+        String prompt = """
+            You are an English writing teacher evaluating Korean students' English translations.
+            
+            Evaluate the following translation from Korean to English:
             
             Korean: %s
-            Student's English: %s
+            Student's translation: %s
             
-            Provide feedback in this JSON format:
+            Provide feedback in the following JSON format:
             {
-                "idealSentence": "The best possible English translation",
-                "feedback": "Detailed feedback about grammar, vocabulary, and natural expression",
-                "score": 85
+                "score": <score between 0-100>,
+                "idealSentence": "<a natural, correct English translation>",
+                "feedback": "<detailed feedback in Korean>"
             }
             
-            Be encouraging and constructive in your feedback.
-            """, koreanSentence, userSentence);
+            Scoring criteria:
+            - 90-100: Perfect or near-perfect translation with natural expression
+            - 80-89: Good translation with minor issues
+            - 70-79: Acceptable but has some grammatical or word choice issues
+            - 60-69: Multiple errors but still conveys the basic meaning
+            - Below 60: Significant errors that impede understanding
+            
+            Consider:
+            1. Grammar accuracy (30%%)
+            2. Word choice and vocabulary (30%%)
+            3. Natural expression (20%%)
+            4. Preservation of original meaning (20%%)
+            
+            Feedback should:
+            1. Start with overall evaluation
+            2. Point out specific errors or issues
+            3. Suggest improvements
+            4. Provide positive reinforcement
+            5. Use Korean language for feedback
+            
+            Be strict but encouraging in your evaluation.
+            """.formatted(koreanSentence, userTranslation);
         
         String content = makeApiCall("feedback", prompt);
         

@@ -211,34 +211,35 @@ public class MenuController {
 
             System.out.println("\n피드백을 요청하는 동안 오늘의 핵심 단어를 복습해보세요!");
             
+            shouldContinueDisplay.set(true);
+            
             Thread keywordThread = new Thread(() -> {
-                System.out.println("\n=== 오늘의 핵심 단어 ===");
-                keywords.forEach(keyword -> {
-                    try {
-                        if (!shouldContinueDisplay.get()) return;
+                try {
+                    System.out.println("\n=== 오늘의 핵심 단어 ===");
+                    for (Map<String, String> keyword : keywords) {
+                        if (!shouldContinueDisplay.get()) break;
                         Thread.sleep(2000);
                         String word = keyword.get("word");
                         String meaning = keyword.get("meaning");
                         System.out.printf("\n%s%s%s: %s%s%s", 
                             YELLOW + BOLD, word, RESET,
                             CYAN, meaning, RESET);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
                     }
-                });
+                } catch (InterruptedException e) {
+                    // 인터럽트 발생 시 조용히 종료
+                }
             });
             keywordThread.start();
 
             Thread feedbackThread = new Thread(() -> {
                 try {
-                    System.out.print("\r⠋ 피드백 분석 중...");
+                    System.out.println("\n\n피드백 분석을 시작합니다...");
                     List<FeedbackResponseDto> feedbacks = new ArrayList<>();
                     for (int i = 0; i < sentences.size(); i++) {
                         feedbacks.add(aiService.getFeedback(sentences.get(i), translations.get(i)));
                     }
                     
                     shouldContinueDisplay.set(false);
-                    keywordThread.interrupt();
                     
                     System.out.println("\n=== 피드백 결과 ===");
                     for (int i = 0; i < sentences.size(); i++) {
@@ -281,12 +282,17 @@ public class MenuController {
                     }
                 } catch (Exception e) {
                     System.out.println("\n피드백 처리 중 오류가 발생했습니다: " + e.getMessage());
+                    shouldContinueDisplay.set(false);
                 }
             });
             feedbackThread.start();
 
-            feedbackThread.join();
-            keywordThread.join();
+            try {
+                feedbackThread.join();
+                keywordThread.join(3000); // 마지막 키워드를 출력할 시간 여유를 더 줌
+            } catch (InterruptedException e) {
+                shouldContinueDisplay.set(false);
+            }
 
             System.out.println("\n\n메인 메뉴로 돌아가려면 Enter 키를 누르세요...");
             scanner.nextLine();
