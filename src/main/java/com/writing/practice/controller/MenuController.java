@@ -5,18 +5,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.writing.practice.domain.apiusage.APIUsageRepository;
 import com.writing.practice.domain.apiusage.APIUsageRepository.APIUsageStats;
 import com.writing.practice.domain.composition.Composition;
 import com.writing.practice.domain.composition.CompositionRepository;
-import com.writing.practice.service.ai.AIService;
-import com.writing.practice.service.ai.AIService.FeedbackResponse;
-import com.writing.practice.service.ai.AIService.SentenceResponse;
-import com.writing.practice.service.ai.AIService.WeaknessAnalysisResponse;
+import com.writing.practice.service.ai.CompositionAIService;
+import com.writing.practice.service.ai.dto.FeedbackResponseDto;
+import com.writing.practice.service.ai.dto.SentenceResponseDto;
+import com.writing.practice.service.ai.dto.WeaknessAnalysisResponseDto;
 
 public class MenuController {
-    private final AIService aiService;
+    private final CompositionAIService aiService;
     private final CompositionRepository compositionRepository;
     private final APIUsageRepository apiUsageRepository;
     private final Scanner scanner;
@@ -31,8 +32,7 @@ public class MenuController {
     private static final String PURPLE = "\u001B[35m";
     private static final String RED = "\u001B[31m";
 
-    public MenuController(AIService aiService) {
-
+    public MenuController(CompositionAIService aiService) {
         this.aiService = aiService;
         this.compositionRepository = new CompositionRepository();
         this.apiUsageRepository = new APIUsageRepository();
@@ -156,9 +156,13 @@ public class MenuController {
             System.out.println("\n=== 복습: 최근 작문 기록 ===");
             List<Composition> recentCompositions = compositionRepository.findRecentCompositions(30);
             
+            AtomicBoolean shouldContinueDisplay = new AtomicBoolean(true);
+            
             Thread reviewThread = new Thread(() -> {
                 try {
-                    for (Composition comp : recentCompositions.stream().limit(3).toList()) { // marker : 복습 문장 maxSize config로 분리할 수도?
+                    for (Composition comp : recentCompositions.stream().limit(3).toList()) {
+                        if (!shouldContinueDisplay.get()) break;
+                        
                         System.out.printf("""
                             
                             %s=== 복습 문장 ===%s
@@ -176,7 +180,7 @@ public class MenuController {
                             GREEN, comp.getIdealSentence(), RESET,
                             CYAN, comp.getCompositionScore(), RESET
                         );
-                        Thread.sleep(8000); // marker : config로 분리할 수도?
+                        Thread.sleep(8000);
                     }
                 } catch (InterruptedException e) {
                 }
@@ -184,8 +188,9 @@ public class MenuController {
             reviewThread.start();
 
             System.out.println("새로운 문장을 가져오는 중입니다...");
-            SentenceResponse response = aiService.getRandomSentences(category);
+            SentenceResponseDto response = aiService.getRandomSentences(category);
             
+            shouldContinueDisplay.set(false);
             reviewThread.interrupt();
             
             List<String> sentences = response.sentences();
@@ -206,18 +211,38 @@ public class MenuController {
 
             System.out.println("\n피드백을 요청하는 동안 오늘의 핵심 단어를 복습해보세요!");
             
+            Thread keywordThread = new Thread(() -> {
+                System.out.println("\n=== 오늘의 핵심 단어 ===");
+                keywords.forEach(keyword -> {
+                    try {
+                        if (!shouldContinueDisplay.get()) return;
+                        Thread.sleep(2000);
+                        String word = keyword.get("word");
+                        String meaning = keyword.get("meaning");
+                        System.out.printf("\n%s%s%s: %s%s%s", 
+                            YELLOW + BOLD, word, RESET,
+                            CYAN, meaning, RESET);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+            });
+            keywordThread.start();
+
             Thread feedbackThread = new Thread(() -> {
                 try {
                     System.out.print("\r⠋ 피드백 분석 중...");
-                    List<FeedbackResponse> feedbacks = new ArrayList<>();
+                    List<FeedbackResponseDto> feedbacks = new ArrayList<>();
                     for (int i = 0; i < sentences.size(); i++) {
                         feedbacks.add(aiService.getFeedback(sentences.get(i), translations.get(i)));
                     }
                     
-                    // 피드백 결과를 하나씩 출력
+                    shouldContinueDisplay.set(false);
+                    keywordThread.interrupt();
+                    
                     System.out.println("\n=== 피드백 결과 ===");
                     for (int i = 0; i < sentences.size(); i++) {
-                        FeedbackResponse feedback = feedbacks.get(i);
+                        FeedbackResponseDto feedback = feedbacks.get(i);
                         
                         System.out.printf("""
                             
@@ -237,7 +262,6 @@ public class MenuController {
                             GREEN, formatFeedback(feedback.feedback()), RESET
                         );
                         
-                        // 결과 저장
                         Composition composition = new Composition(
                             category,
                             sentences.get(i),
@@ -261,21 +285,8 @@ public class MenuController {
             });
             feedbackThread.start();
 
-            System.out.println("\n=== 오늘의 핵심 단어 ===");
-            for (Map<String, String> keyword : keywords) {
-                keyword.forEach((word, meaning) -> {
-                    try {
-                        Thread.sleep(2000); // marker : config로 분리할 수도??
-                        System.out.printf("\n%s%s%s: %s%s%s", 
-                            YELLOW + BOLD, word, RESET,
-                            CYAN, meaning, RESET);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                });
-            }
-
             feedbackThread.join();
+            keywordThread.join();
 
             System.out.println("\n\n메인 메뉴로 돌아가려면 Enter 키를 누르세요...");
             scanner.nextLine();
@@ -294,7 +305,7 @@ public class MenuController {
             printUsageStats(30);
             
             System.out.println("\n[전체 통계]");
-            printUsageStats(36500); // marker : config로 분리할 수도??
+            printUsageStats(36500);
             
             System.out.println("\n메인 메뉴로 돌아가려면 Enter 키를 누르세요...");
             scanner.nextLine();
@@ -340,7 +351,7 @@ public class MenuController {
             
             Thread analysisThread = new Thread(() -> {
                 try {
-                    WeaknessAnalysisResponse analysis = aiService.analyzeWeakness(recentSentences);
+                    WeaknessAnalysisResponseDto analysis = aiService.analyzeWeakness(recentSentences);
                     
                     System.out.println("\n=== 약점 분석 결과 ===");
                     System.out.println("\n발견된 약점:");
@@ -385,17 +396,35 @@ public class MenuController {
     }
 
     private void setAIModel() {
-        System.out.println("현재 지원되는 모델: deepseek-chat");
-        System.out.printf("사용할 모델을 입력하세요 (현재: %s): ", aiService.getCurrentModel());
-        String model = scanner.nextLine().trim();
+        System.out.println("\n=== AI 모델 설정 ===");
+        System.out.println("현재 지원되는 모델:");
+        System.out.println("1. Deepseek 모델:");
+        System.out.println("   - deepseek-chat");
+        System.out.println("2. ChatGPT 모델:");
+        System.out.println("   - gpt-3.5-turbo");
+        System.out.println("   - gpt-4");
         
-        if (model.isEmpty() || !model.equals("deepseek-chat")) {
-            System.out.println("유효하지 않은 모델입니다. 현재 모델을 유지합니다.");
+        System.out.printf("\n현재 모델: %s%s%s%n", CYAN, aiService.getCurrentModel(), RESET);
+        System.out.print("사용할 모델을 입력하세요: ");
+        String model = scanner.nextLine().trim().toLowerCase();
+        
+        List<String> validDeepseekModels = List.of("deepseek-chat");
+        List<String> validChatGPTModels = List.of("gpt-3.5-turbo", "gpt-4");
+        
+        if (model.isEmpty() || 
+            (!validDeepseekModels.contains(model) && !validChatGPTModels.contains(model))) {
+            System.out.println(RED + "유효하지 않은 모델입니다. 현재 모델을 유지합니다." + RESET);
             return;
         }
         
         aiService.setModel(model);
-        System.out.println("AI 모델이 설정되었습니다.");
+        
+        if (validChatGPTModels.contains(model) && Math.abs(aiService.getCurrentTemperature() - 1.3) < 0.1) {
+            aiService.setTemperature(0.7);
+            System.out.println(YELLOW + "ChatGPT 모델에 적합한 temperature 값(0.7)으로 자동 조정되었습니다." + RESET);
+        }
+        
+        System.out.println(GREEN + "AI 모델이 성공적으로 설정되었습니다." + RESET);
     }
 
     private void setMaxToken() {
