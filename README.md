@@ -2,4 +2,5 @@
 AI를 이용한 영작문 연습 프로그램
 
 .env <br>
-API_KEY= 'your api key here'
+DEEPSEEK_API_KEY = 'your-deepseek-api-key-here'
+OPENAI_API_KEY = 'your-openai-api-key-here'
